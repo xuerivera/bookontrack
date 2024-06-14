@@ -1,9 +1,13 @@
 ---
-import { db } from "astro:db";
 import Input from "../components/Input.astro";
 
 const bookres = await fetch(`${Astro.url.origin}/api/getBooks.json`);
-const books = await bookres.json();
+let books = [];
+if (bookres.ok) {
+  books = await bookres.json();
+} else {
+  console.error('Failed to fetch books');
+}
 ---
 
 <html lang="en">

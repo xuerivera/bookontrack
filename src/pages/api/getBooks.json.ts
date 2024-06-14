@@ -13,7 +13,10 @@ export const GET: APIRoute = async ({ request }) => {
         .where(eq(Books.key, bookId));
 
       if (singleBook.length === 0) {
-        return new Response(JSON.stringify({ error: 'Book not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ error: 'Book not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       return new Response(JSON.stringify(singleBook), {
