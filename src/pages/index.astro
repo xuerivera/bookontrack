@@ -1,0 +1,284 @@
+---
+import { db } from "astro:db";
+import Input from "../components/Input.astro";
+import { Books } from "astro:db";
+
+const bookres = await fetch(`${Astro.url.origin}/api/getBooks.json`);
+const books = await bookres.json();
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <title>Astro</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  </head>
+  <body class="bg-gradient-to-r from-blue-50 to-blue-200 min-h-screen">
+    <h1 class="text-4xl font-bold text-center my-8 text-blue-700">Astro Book Tracker</h1>
+    <div class="container mx-auto p-4">
+      <form id="book-form" class="mb-8">
+        <label for="book-search" class="block text-lg font-medium text-gray-700">Search for Book</label>
+        <input
+          id="book-search"
+          type="text"
+          class="border-2 border-blue-300 p-2 w-full rounded-md shadow-sm"
+          placeholder="Enter your search"
+        />
+      </form>
+      <div id="books-wrapper" class="flex flex-wrap gap-6 justify-center"></div>
+      <h2 class="text-3xl font-bold text-center my-8 text-blue-700">Selected Books</h2>
+      <div id="selected-books-wrapper" class="flex flex-wrap gap-6 justify-center"></div>
+    </div>
+
+    <!-- Modal -->
+    <div id="book-modal" class="fixed inset-0 bg-gray-900 bg-opacity-50 hidden flex justify-center items-center z-50">
+      <div class="bg-white p-6 rounded-lg shadow-lg max-w-lg w-full relative">
+        <button id="close-modal" class="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl">
+          &times;
+        </button>
+        <h2 id="modal-title" class="text-2xl font-bold mb-4 text-center text-blue-700"></h2>
+        <img id="modal-image" src="" alt="Book cover" class="w-full h-64 object-cover rounded-t-lg mb-4"/>
+        <p id="modal-description" class="text-gray-600 mb-4"></p>
+        <p id="modal-author" class="text-gray-600 mb-2"></p>
+        <p id="modal-pages" class="text-gray-600 mb-2"></p>
+        <p id="modal-year" class="text-gray-600 mb-2"></p>
+        <p id="modal-rating" class="text-gray-600 mb-2"></p>
+        <p id="modal-language" class="text-gray-600 mb-2"></p>
+        <a id="modal-link" href="#" target="_blank" class="inline-block mt-4 py-2 px-4 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors duration-300 text-center">Buy this book</a>
+      </div>
+    </div>
+
+    <script>
+      interface Book {
+        key: string;
+        title: string;
+        author_key: string[];
+        author_name: string[];
+        image_link: string;
+        number_of_pages_median?: number;
+        first_publish_year?: number;
+        ratings_average?: number;
+        language?: string[];
+        description?: string;
+        buy_link?: string;
+      }
+
+      const booksWrapper = document.querySelector("#books-wrapper") as HTMLDivElement | null;
+      const selectedBooksWrapper = document.querySelector("#selected-books-wrapper") as HTMLDivElement | null;
+      const bookForm = document.querySelector("#book-form") as HTMLFormElement | null;
+      const bookInput = document.querySelector("#book-search") as HTMLInputElement | null;
+      const bookModal = document.querySelector("#book-modal") as HTMLDivElement | null;
+      const closeModal = document.querySelector("#close-modal") as HTMLButtonElement | null;
+      const modalTitle = document.querySelector("#modal-title") as HTMLHeadingElement | null;
+      const modalImage = document.querySelector("#modal-image") as HTMLImageElement | null;
+      const modalDescription = document.querySelector("#modal-description") as HTMLParagraphElement | null;
+      const modalAuthor = document.querySelector("#modal-author") as HTMLParagraphElement | null;
+      const modalPages = document.querySelector("#modal-pages") as HTMLParagraphElement | null;
+      const modalYear = document.querySelector("#modal-year") as HTMLParagraphElement | null;
+      const modalRating = document.querySelector("#modal-rating") as HTMLParagraphElement | null;
+      const modalLanguage = document.querySelector("#modal-language") as HTMLParagraphElement | null;
+      const modalLink = document.querySelector("#modal-link") as HTMLAnchorElement | null;
+
+      let selectedBooks: Book[] = [];
+      let allBooks: Book[] = []; // Declare the 'books' variable
+
+      const saveSelectedBooks = () => {
+        localStorage.setItem("selectedBooks", JSON.stringify(selectedBooks));
+      };
+
+      const loadSelectedBooks = () => {
+        const savedBooks = localStorage.getItem("selectedBooks");
+        if (savedBooks) {
+          selectedBooks = JSON.parse(savedBooks);
+          renderSelectedBooks();
+        }
+      };
+
+      const generateBookCard = (book: Book, isSelected: boolean = false) => {
+        const buttonLabel = isSelected ? "Remove Book" : "Save Book";
+        const buttonClasses = isSelected ? "bg-red-500 hover:bg-red-600" : "bg-blue-500 hover:bg-blue-600";
+
+        return `<div class="max-w-xs bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 p-6 cursor-pointer transform hover:-translate-y-1 hover:scale-105" data-key="${book.key}">
+          <img src="${book.image_link}" alt="Book cover" class="w-full h-64 object-cover rounded-t-lg"/>
+          <div class="p-4">
+            <h3 class="text-xl font-semibold mb-2 text-blue-700">${book.title}</h3>
+            <p class="text-gray-600 mb-2">${book.author_name.join(', ')}</p>
+            ${book.number_of_pages_median ? `<p class="text-gray-600">Pages: ${book.number_of_pages_median}</p>` : ''}
+            ${book.first_publish_year ? `<p class="text-gray-600">Published: ${book.first_publish_year}</p>` : ''}
+            ${book.ratings_average ? `<p class="text-gray-600">Rating: ${book.ratings_average}</p>` : ''}
+            ${book.language ? `<p class="text-gray-600">Language: ${book.language.join(', ')}</p>` : ''}
+            <button data-bookdata="true" data-key="${book.key}" data-title="${book.title}" data-authorname="${book.author_name.join(', ')}" data-authorkey="${book.author_key.join(', ')}" data-imagelink="${book.image_link}" class="mt-4 py-2 px-4 text-white rounded-md ${buttonClasses} transition-colors duration-300">${buttonLabel}</button>
+          </div>
+        </div>`;
+      };
+
+      const renderSelectedBooks = () => {
+        if (selectedBooksWrapper) {
+          selectedBooksWrapper.innerHTML = selectedBooks.map(book => generateBookCard(book, true)).join("");
+        }
+      };
+
+      const getImageLink = async (isbn_array: string[]): Promise<string> => {
+        const fallbackImage = 'path/to/your/fallback-image.jpg'; // Provide a valid path to a fallback image
+        let image_link = fallbackImage;
+
+        const fetchImage = async (isbn: string): Promise<boolean> => {
+          try {
+            const image_res = await fetch(`https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg?default=false`);
+
+            if (image_res.ok) {
+              image_link = `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg?default=false`;
+              return true;
+            }
+            console.error(`Image not found for ISBN: ${isbn}`);
+            return false;
+          } catch (error) {
+            console.error(`Failed to fetch image for ISBN: ${isbn}`, error);
+            return false;
+          }
+        };
+
+        for (const isbn of isbn_array) {
+          if (image_link !== fallbackImage) {
+            break;
+          }
+          await fetchImage(isbn);
+        }
+
+        return image_link;
+      };
+
+      const openModal = (book: Book) => {
+        if (modalTitle) modalTitle.textContent = book.title;
+        if (modalImage) modalImage.src = book.image_link;
+        if (modalDescription) modalDescription.textContent = book.description || "No description available.";
+        if (modalAuthor) modalAuthor.textContent = `Author: ${book.author_name.join(', ')}`;
+        if (modalPages) modalPages.textContent = book.number_of_pages_median ? `Pages: ${book.number_of_pages_median}` : '';
+        if (modalYear) modalYear.textContent = book.first_publish_year ? `Published: ${book.first_publish_year}` : '';
+        if (modalRating) modalRating.textContent = book.ratings_average ? `Rating: ${book.ratings_average}` : '';
+        if (modalLanguage) modalLanguage.textContent = book.language ? `Language: ${book.language.join(', ')}` : '';
+        if (modalLink) modalLink.href = book.buy_link || "#";
+        if (bookModal) bookModal.classList.remove("hidden");
+      };
+
+      if (bookForm) {
+        bookForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          if (bookInput) {
+            const searchVal = bookInput.value;
+
+            try {
+              const res = await fetch(`https://openlibrary.org/search.json?lang=en&title=${encodeURIComponent(searchVal)}`);
+              const data: BookRes = await res.json();
+
+              const processedData = await Promise.all(data.docs.map(async (doc: DocsItem) => {
+                const image_link = await getImageLink(doc.isbn || []);
+                const book: Book = {
+                  key: doc.key,
+                  title: doc.title,
+                  author_key: doc.author_key,
+                  author_name: doc.author_name,
+                  image_link,
+                  number_of_pages_median: doc.number_of_pages_median,
+                  first_publish_year: doc.first_publish_year,
+                  ratings_average: doc.ratings_average,
+                  language: doc.language,
+                  description: doc.subtitle || "",
+                  buy_link: `https://www.bookfinder.com/search/?isbn=${doc.isbn ? doc.isbn[0] : ''}&st=sr&ac=qr`
+                };
+                allBooks.push(book); // Store the books in the global array
+                return book;
+              }));
+
+              if (processedData.length === 0) {
+                if (booksWrapper) booksWrapper.innerHTML = "<p>No books found</p>";
+                return;
+              }
+              if (booksWrapper) booksWrapper.innerHTML = processedData.map(book => generateBookCard(book)).join("");
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        });
+      }
+
+      if (booksWrapper) {
+        booksWrapper.addEventListener("click", (e) => {
+          const card = (e.target as HTMLElement).closest("div[data-key]");
+          if (card) {
+            const bookKey = card.getAttribute("data-key");
+            const book = selectedBooks.find(b => b.key === bookKey) || allBooks.find(b => b.key === bookKey);
+            if (book) {
+              openModal(book);
+            }
+          }
+          const button = (e.target as HTMLButtonElement);
+          if (button && button.hasAttribute("data-bookdata")) {
+            const bookKey = button.getAttribute("data-key");
+
+            const book = selectedBooks.find(b => b.key === bookKey);
+
+            if (book) {
+              selectedBooks.splice(selectedBooks.indexOf(book), 1);
+            } else {
+              const title = button.getAttribute("data-title") || "";
+              const authorName = button.getAttribute("data-authorname") || "";
+              const authorKey = button.getAttribute("data-authorkey")?.split(',') || [];
+              const imageLink = button.getAttribute("data-imagelink") || "";
+              const numberOfPages = parseInt(button.closest("div")?.querySelector("p:nth-child(3)")?.textContent?.replace("Pages: ", "") || "") || undefined;
+              const publishedYear = parseInt(button.closest("div")?.querySelector("p:nth-child(4)")?.textContent?.replace("Published: ", "") || "") || undefined;
+              const rating = parseFloat(button.closest("div")?.querySelector("p:nth-child(5)")?.textContent?.replace("Rating: ", "") || "") || undefined;
+              const language = button.closest("div")?.querySelector("p:nth-child(6)")?.textContent?.replace("Language: ", "").split(',') || [];
+
+              selectedBooks.push({
+                key: bookKey || "",
+                title,
+                author_key: authorKey,
+                author_name: authorName.split(', '),
+                image_link: imageLink,
+                number_of_pages_median: numberOfPages,
+                first_publish_year: publishedYear,
+                ratings_average: rating,
+                language,
+              });
+            }
+
+            saveSelectedBooks();
+            renderSelectedBooks();
+          }
+        });
+      }
+
+      if (selectedBooksWrapper) {
+        selectedBooksWrapper.addEventListener("click", (e) => {
+          const button = (e.target as HTMLButtonElement);
+          if (!button.hasAttribute("data-bookdata")) return;
+
+          const bookKey = button.getAttribute("data-key");
+
+          const bookIndex = selectedBooks.findIndex(b => b.key === bookKey);
+
+          if (bookIndex !== -1) {
+            selectedBooks.splice(bookIndex, 1);
+            saveSelectedBooks();
+            renderSelectedBooks();
+          }
+        });
+      }
+
+      if (closeModal) {
+        closeModal.addEventListener("click", () => {
+          if (bookModal) bookModal.classList.add("hidden");
+        });
+      }
+
+      // Load selected books from localStorage on page load
+      window.addEventListener("load", () => {
+        loadSelectedBooks();
+      });
+    </script>
+  </body>
+</html>
