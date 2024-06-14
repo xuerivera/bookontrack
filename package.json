@@ -4,11 +4,11 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
-    "start": "node ./dist/server/entry.mjs",
-    "build": "astro check && astro build --remote",
+    "start": "astro dev",
+    "build": "astro check && astro build",
     "preview": "astro preview",
     "astro": "astro"
-}
+  }
 ,
   "dependencies": {
     "@astrojs/check": "^0.7.0",
