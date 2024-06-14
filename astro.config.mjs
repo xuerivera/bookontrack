@@ -6,5 +6,10 @@ import tailwind from "@astrojs/tailwind";
 export default defineConfig({
   integrations: [db(), tailwind()],
   output: "server",
-  adapter: vercel()
+  adapter: vercel({
+    config: {
+      // Enable verbose logging
+      logLevel: 'debug'
+    }
+  })
 });
